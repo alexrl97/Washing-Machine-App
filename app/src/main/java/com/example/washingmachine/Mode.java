@@ -2,16 +2,19 @@ package com.example.washingmachine;
 
 public class Mode {
 
+    //Entitäten eines Waschgangs
     private String key;
     private String name;
     private int runtime;
 
+    //Klasse bildet eine Konstruktionsvorschrift für die objektorientierte Verwaltung der Waschgänge in der App
     public Mode(String key, String name, int runtime){
         this.key = key;
         this.name = name;
         this.runtime = runtime;
     }
 
+    //Setter & Getter
     public String getKey() {
         return key;
     }

@@ -47,24 +47,29 @@ import java.util.Objects;
 
 public class MainActivity extends AppCompatActivity {
 
+    //Firebase Authentifikator & Referenzobjekte
     private FirebaseAuth mAuth;
     private DatabaseReference databaseReferenceReadings;
     private DatabaseReference databaseReferenceModes;
 
+    //Listen für das Dropdown Menü
     private ArrayList<Mode> modesList = new ArrayList<>();
     private ArrayList<String> modeStrings = new ArrayList<>();
 
+    //Benötigte Int Werte
     private int latestEventTs = 0;
     private int latestStartTs;
     private int runtimeMeasured = 0;
     private int remaningSeconds;
     private int runtimeSelectionPrevious = 0;
 
+    //Countdowntimer Entitäten
     private CountDownTimer cTimer;
     private boolean runCountdown = false;
     private String TIME_SERVER = "pool.ntp.org";
     private NTPUDPClient timeClient = new NTPUDPClient();
 
+    //GUI Elemente
     private TextView state;
     private TextView timer;
     private TextView measuredRuntime;
@@ -74,11 +79,13 @@ public class MainActivity extends AppCompatActivity {
     private Button deleteMode;
     private EditText userMode;
 
+    //Konstante Strings & Farben
     private final String redColor = "#db1304";
     private final String greenColor = "#02bd05";
     private final String washingMachineOn = "Washing Machine: On";
     private final String washingMachineOff = "Washing Machine: Off";
 
+    //Notification Management
     private NotificationCompat.Builder builder;
     private NotificationManagerCompat managerCompat;
 
@@ -88,8 +95,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mAuth = FirebaseAuth.getInstance();
-
+        //Initialisierung der GUI Elemente
         measuredRuntime = findViewById(R.id.textView3);
         state = findViewById(R.id.textView2);
         timer = findViewById(R.id.textView);
@@ -99,18 +105,19 @@ public class MainActivity extends AppCompatActivity {
         deleteMode = findViewById(R.id.button3);
         userMode = findViewById(R.id.plain_text_input);
 
-
+        //Authentifizierungs & Datenreferenzobjecte für Firebase
+        mAuth = FirebaseAuth.getInstance();
         databaseReferenceModes = FirebaseDatabase.getInstance().getReference("UsersData/6Z6TF0cmdkYWm8b7vFLjbreuRag1/modes");
         databaseReferenceReadings = FirebaseDatabase.getInstance().getReference("UsersData/6Z6TF0cmdkYWm8b7vFLjbreuRag1/readings");
 
+        //Vorbereitung der Notification-Ausgabe
         builder = new NotificationCompat.Builder(this, "State")
                 .setSmallIcon(R.drawable.ic_launcher_background)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true).setSilent(true);
-
         managerCompat= NotificationManagerCompat.from(this);
 
-
+        //Login in Firebase DB
         mAuth.signInWithEmailAndPassword("alexruehle57@gmail.com", "123456")
                 .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
                     @Override
@@ -126,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
 
-
+        //Speichern der aktuellen Waschgänge und befüllen des Dropdown-Menüs
         databaseReferenceModes.get().addOnCompleteListener(task -> {
             if (!task.isSuccessful()) {
                 Log.e("firebase", "Error getting data", task.getException());
@@ -148,16 +155,17 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-        //https://www.youtube.com/watch?v=Mare_muqF1c
+        //Regelt die Darstellung abhängig vom Status der Waschmaschine und der verbleibenden Restzeit
         dropdown.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
 
+                //Berechnung der verbleibenden Restzeit im aktuellen Waschgang
                 int runtimeSelection = modesList.get(modeStrings.indexOf(dropdown.getSelectedItem().toString())).getRuntime();
                 int runTimeDifInSeconds = runtimeSelectionPrevious - runtimeSelection;
-
                 remaningSeconds = remaningSeconds - runTimeDifInSeconds;
 
+                //Anzeige für Waschgänge ohne gespeicherte Runtim
                 if(!saveRuntime.isEnabled()) {
                     if (runtimeSelection == 0) {
                         measuredRuntime.setText("No wash time measured yet\nIt will be measured in the first wash");
@@ -166,16 +174,15 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
+                //Setzt den Countdowntimer auf die verbleibende Restzeit
                 if(runCountdown){
                     cTimer.cancel();
-
                     if(remaningSeconds < 0){
                         setTimer(0,true);
                     }
                     else{
                         setTimerToRemainingTimeOfCurrentSelection();
                     }
-
                 }
                 else{
                     setTimer(runtimeSelection, false);
@@ -190,7 +197,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-
+        //Setzt den aktuellen Status in der App auf das letzte Event vom ESP 8266
         databaseReferenceReadings.get().addOnCompleteListener(task -> {
             if (!task.isSuccessful()) {
                 Log.e("firebase", "Error getting data", task.getException());
@@ -202,10 +209,12 @@ public class MainActivity extends AppCompatActivity {
                 task.getResult().getChildren().forEach(list::add);
                 latestEventTs = Integer.parseInt(Objects.requireNonNull(list.get(list.size() - 1).getKey()));
 
+                //Waschmachine ist beim App-Start ausgeschaltet
                 if(Objects.requireNonNull(list.get(list.size() - 1).child("mode").getValue()).toString().equals("Off")){
                     state.setText(washingMachineOff);
                     state.setTextColor(Color.parseColor(redColor));
                 }
+                //Waschmachine ist beim App-Start eingeschaltet
                 else {
                     latestStartTs = Integer.parseInt(Objects.requireNonNull(list.get(list.size() - 1).getKey()));
                     setTimerToRemainingTimeOfCurrentSelection();
@@ -215,17 +224,19 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //Vorbereitung der Notification
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel("State","State", NotificationManager.IMPORTANCE_DEFAULT);
             NotificationManager manager = getSystemService(NotificationManager.class);
             manager.createNotificationChannel(channel);
         }
 
-
+        //Regelt die Anzeige in der App wenn der ESP 8266 ein neues Status Event der Waschmaschine in die Datenbank lädt
         databaseReferenceReadings.addChildEventListener(new ChildEventListener() {
             @Override
             public void onChildAdded(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
 
+                //Waschmaschine wird im laufenden App betrieb ausgeschaltet
                 if(Objects.requireNonNull(snapshot.child("mode").getValue()).toString().equals("Off") && latestEventTs != 0 && latestEventTs < Integer.parseInt(snapshot.getKey())){
                     state.setText(washingMachineOff);
                     state.setTextColor(Color.parseColor(redColor));
@@ -239,6 +250,7 @@ public class MainActivity extends AppCompatActivity {
                     saveRuntime.setBackgroundColor(Color.parseColor(greenColor));
 
                 }
+                //Waschmaschine wird im laufenden App betrieb eingeschaltet
                 if(Objects.requireNonNull(snapshot.child("mode").getValue()).toString().equals("On") &&  latestEventTs != 0 && latestEventTs < Integer.parseInt(snapshot.getKey())){
                     state.setText(washingMachineOn);
                     state.setTextColor(Color.parseColor(greenColor));
@@ -273,6 +285,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //Regelt das Überschreiben der Runtime für den ausgeqwählten Waschgang aus dem Dropdown Menü in der Datenbank
         saveRuntime.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -285,15 +298,18 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //Fügt einen neuen Waschmodus in der Datenbank hinzu, wenn der Button gedrückt wird und ein gültiger Name für den Waschgang angegeben wurde
         addMode.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 String userInput = userMode.getText().toString();
                 boolean nameGiven = false;
 
+                //Darf nicht leer sein
                 if(modeStrings.contains(userInput))
                     nameGiven = true;
 
+                //Darf keinen Schrägstrich enthalten
                 if(userInput.length() > 0 && !userInput.contains("/") && !nameGiven){
                     String key = databaseReferenceModes.push().getKey();
                     databaseReferenceModes.child(key).child("name").setValue(userInput);
@@ -303,6 +319,7 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(MainActivity.this, "Added", Toast.LENGTH_SHORT).show();
                     userMode.setText("");
                 }
+                //Den Waschgang darf es noch nicht geben
                 else if(nameGiven){
                     Toast.makeText(MainActivity.this, "Mode already stored", Toast.LENGTH_SHORT).show();
                 }
@@ -312,15 +329,17 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //Regelt das Löschen eines Waschgangs in der Datenbank
         deleteMode.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
 
+                //Default Mode darf nicht gelöscht werden
                 if(dropdown.getSelectedItem().toString() == modeStrings.get(0)){
                     Toast.makeText(MainActivity.this, "Default Mode can't be deleted", Toast.LENGTH_SHORT).show();
                 }
                 else {
-
+                //Erfordert eine Bestätigung zur Löschung eines Waschgangs
                     new AlertDialog.Builder(MainActivity.this)
                             .setTitle("Deletion Confirmation")
                             .setMessage("Do you really want to delete mode '" + dropdown.getSelectedItem().toString() + "' ?")
@@ -347,6 +366,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    //Setzt den Timer in der App und optional auch in der Notification
     public void setTimer(int seconds, boolean setNotificationTimer){
 
         int hours = seconds / 3600;
@@ -360,6 +380,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //Gibt einen Zeitwert in Sekunden im Format HH:MM:SS als String für den Timer zurück
     public String getRuntimeString(int seconds){
         int hours = seconds / 3600;
         int minutes = (seconds % 3600) / 60;
@@ -367,6 +388,7 @@ public class MainActivity extends AppCompatActivity {
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
+    //Startet den Countdown mit einem Zeitwert in Sekunden
     public void startCountdown(int startValue) {
         cTimer = new CountDownTimer(startValue*1000, 1000) {
             public void onTick(long millisUntilFinished) {
@@ -384,12 +406,14 @@ public class MainActivity extends AppCompatActivity {
         cTimer.start();
     }
 
+    //Stoppt den Timer
     void cancelTimer() {
         if(cTimer!=null) {
             cTimer.cancel();
         }
     }
 
+    //Berechnet die verbleibende Restzeit eines Waschgangs anhand des aktuellen timestamps und dem timestamp des letzten Waschmaschinenstarts
     public void setTimerToRemainingTimeOfCurrentSelection(){
 
         new Thread(() -> {
@@ -413,6 +437,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    //Synchronisiert die Darstellung der Waschgänge im Dropdown Menü mit den Einträgen in der Datenbank
     public void updateDropdown(boolean initialFill, boolean deletion){
         if(initialFill) {
             modesList.forEach((mode -> {
