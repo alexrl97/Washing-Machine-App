@@ -10,9 +10,6 @@
 // Provide the RTDB payload printing info and other helper functions.
 #include "addons/RTDBHelper.h"
 
-// Insert your network credentials
-#define WIFI_SSID "Vodafone-7B4C"//"motorola one action 1229"//"Vodafone-7B4C"
-#define WIFI_PASSWORD "hGqTcMMRcd6tQHEC"//"00000000"//"hGqTcMMRcd6tQHEC"
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyAmKU4QfruJGYFui8cglHPCY3huvCFZ4KQ"
